@@ -16,48 +16,61 @@
 
   switch ($action) {
     case 'export':
-      $info = tep_get_system_information(true);
+      $info = tep_get_system_information();
     break;
+
     case 'submit':
-      $info = tep_get_system_information(true);
-      $encoded = base64_encode(serialize($info));
-      $target = '';
+      $target_host = 'usage.oscommerce.com';
+      $target_path = '/submit.php';
+
+      $encoded = base64_encode(serialize(tep_get_system_information()));
+
       $response = false;
+
       if (function_exists('curl_init')) {
-        $data = array('stats' => $encoded);
+        $data = array('info' => $encoded);
+
         $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $target);
+        curl_setopt($ch, CURLOPT_URL, 'http://' . $target_host . $target_path);
         curl_setopt($ch, CURLOPT_POST, 1);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         $response = trim(curl_exec($ch));
         curl_close($ch);
       } else {
-        if ($fp = @fsockopen('', 80, $errno, $errstr, 30)) {
-          $data = 'stats=' . $encoded;
-          fputs($fp, "POST  HTTP/1.1\r\n");
-          fputs($fp, "Host: \r\n");
+        if ($fp = @fsockopen($target_host, 80, $errno, $errstr, 30)) {
+          $data = 'info=' . $encoded;
+
+          fputs($fp, "POST " . $target_path . " HTTP/1.1\r\n");
+          fputs($fp, "Host: " . $target_host . "\r\n");
           fputs($fp, "Content-type: application/x-www-form-urlencoded\r\n");
-          fputs($fp, "Content-length: ".strlen($data)."\r\n");
+          fputs($fp, "Content-length: " . strlen($data) . "\r\n");
           fputs($fp, "Connection: close\r\n\r\n");
           fputs($fp, $data."\r\n\r\n");
-          while(!feof($fp)) {
-            $response .= fgets($fp,4096);
+
+          $response = '';
+
+          while (!feof($fp)) {
+            $response .= fgets($fp, 4096);
           }
+
           fclose($fp);
+
+          $response = trim(substr($response, strrpos($response, "\r\n\r\n")));
         }
       }
 
-
-      if (!$response) {
+      if ($response != 'OK') {
         $messageStack->add_session(ERROR_INFO_SUBMIT, 'error');
       } else {
         $messageStack->add_session(SUCCESS_INFO_SUBMIT, 'success');
       }
+
       tep_redirect(tep_href_link(FILENAME_SERVER_INFO));
     break;
+
     case 'save':
-      $info = tep_get_system_information(true);
+      $info = tep_get_system_information();
       $info_file = 'server_info-' . date('YmdHis') . '.txt';
       header('Content-type: text/plain');
       header('Content-disposition: attachment; filename=' . $info_file);
@@ -128,6 +141,7 @@
       </tr>
   <?php
   } else {
+    $server = parse_url(HTTP_SERVER);
 ?>
       <tr>
         <td><table border="0" width="100%" cellspacing="0" cellpadding="2">
@@ -135,15 +149,15 @@
             <td><table border="0" cellspacing="0" cellpadding="3">
               <tr>
                 <td class="smallText"><b><?php echo TITLE_SERVER_HOST; ?></b></td>
-                <td class="smallText"><?php echo $info['system']['host'] . ' (' . $info['system']['ip'] . ')'; ?></td>
+                <td class="smallText"><?php echo $server['host'] . ' (' . gethostbyname($server['host']) . ')'; ?></td>
                 <td class="smallText">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b><?php echo TITLE_DATABASE_HOST; ?></b></td>
-                <td class="smallText"><?php echo $info['mysql']['server'] . ' (' . $info['mysql']['ip'] . ')'; ?></td>
+                <td class="smallText"><?php echo DB_SERVER . ' (' . gethostbyname(DB_SERVER) . ')'; ?></td>
               </tr>
               <tr>
                 <td class="smallText"><b><?php echo TITLE_SERVER_OS; ?></b></td>
                 <td class="smallText"><?php echo $info['system']['os'] . ' ' . $info['system']['kernel']; ?></td>
                 <td class="smallText">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b><?php echo TITLE_DATABASE; ?></b></td>
-                <td class="smallText"><?php echo $info['mysql']['version']; ?></td>
+                <td class="smallText"><?php echo 'MySQL ' . $info['mysql']['version']; ?></td>
               </tr>
               <tr>
                 <td class="smallText"><b><?php echo TITLE_SERVER_DATE; ?></b></td>
